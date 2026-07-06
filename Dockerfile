@@ -1,16 +1,20 @@
 # stage 1: builder
-FROM golang:1.21.8-alpine as builder
+FROM golang:1.25.1-alpine as builder
 
 ENV BURROW_SRC /usr/src/Burrow/
 
 RUN apk add --no-cache git curl
-COPY . $BURROW_SRC
 WORKDIR $BURROW_SRC
 
-RUN go mod tidy && go build -o /tmp/burrow .
+COPY go.mod go.sum ./
+
+RUN go mod download
+
+COPY . $BURROW_SRC
+RUN go build -o /tmp/burrow .
 
 # stage 2: runner
-FROM alpine:3.18
+FROM alpine:3.22
 
 LABEL maintainer="LinkedIn Burrow https://github.com/linkedin/Burrow"
 
