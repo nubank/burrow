@@ -643,6 +643,7 @@ func (module *InMemoryStorage) deleteTopic(request *protocol.StorageRequest, req
 		return
 	}
 
+	clusterMap.consumerLock.RLock()
 	// Work backwards - remove the topic from consumer groups first
 	for _, consumerMap := range clusterMap.consumer {
 		consumerMap.lock.Lock()
@@ -650,6 +651,7 @@ func (module *InMemoryStorage) deleteTopic(request *protocol.StorageRequest, req
 		delete(consumerMap.topics, request.Topic)
 		consumerMap.lock.Unlock()
 	}
+	clusterMap.consumerLock.RUnlock()
 
 	// Now remove the topic from the broker list
 	clusterMap.brokerLock.Lock()
@@ -667,16 +669,26 @@ func (module *InMemoryStorage) deleteGroup(request *protocol.StorageRequest, req
 	}
 
 	clusterMap.consumerLock.Lock()
+	deleteAllGroupMetrics := true
 	if group, ok := clusterMap.consumer[request.Group]; ok && request.Topic != "" {
 		delete(group.topics, request.Topic)
 		if len(group.topics) == 0 {
 			delete(clusterMap.consumer, request.Group)
+		} else {
+			// The consumer group consumes other topics, thus we need to keep its metrics
+			deleteAllGroupMetrics = false
 		}
 	} else {
 		delete(clusterMap.consumer, request.Group)
 	}
 	clusterMap.consumerLock.Unlock()
-	httpserver.DeleteConsumerMetrics(request.Cluster, request.Group)
+
+	if deleteAllGroupMetrics {
+		httpserver.DeleteConsumerMetrics(request.Cluster, request.Group)
+	} else {
+		// only a specific topic was deleted and the consumer group still exists, thus we delete only a subset of the metrics
+		httpserver.DeleteConsumerTopicMetrics(request.Cluster, request.Group, request.Topic)
+	}
 
 	requestLogger.Debug("ok")
 }
