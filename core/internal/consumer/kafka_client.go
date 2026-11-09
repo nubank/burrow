@@ -537,6 +537,15 @@ func (module *KafkaClient) decodeGroupMetadata(keyBuffer *bytes.Buffer, value []
 		return
 	}
 
+	if !module.acceptConsumerGroup(group) {
+		logger.Debug("dropped",
+			zap.String("message_type", "metadata"),
+			zap.String("group", group),
+			zap.String("reason", "allowlist"),
+		)
+		return
+	}
+
 	if len(value) == 0 {
 		// Tombstone message - group deleted
 		logger.Debug("removing consumer group due to tombstone")
