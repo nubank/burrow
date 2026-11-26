@@ -693,6 +693,22 @@ func TestKafkaClient_decodeGroupMetadata_Errors(t *testing.T) {
 	}
 }
 
+func TestKafkaClient_decodeGroupMetadata_Denylist(t *testing.T) {
+	module := fixtureModule()
+	viper.Set("consumer.test.group-denylist", "^dropthisgroup$")
+	module.Configure("test", "consumer.test")
+
+	keyBuf := bytes.NewBuffer([]byte("\x00\x0ddropthisgroup"))
+	valueBytes := []byte("\x00\x01\x00\x08consumer\x00\x00\x00\x01\x00\x0ctestprotocol\x00\x0atestleader\x00\x00\x00\x01\x00\x0ctestmemberid\x00\x0ctestclientid\x00\x0etestclienthost\x00\x00\x00\x04\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00\x00\x1a\x00\x00\x00\x00\x00\x01\x00\x06topic1\x00\x00\x00\x01\x00\x00\x00\x0b\x00\x00\x00\x00")
+
+	// Should not timeout as the group should be dropped by the denylist before
+	// any storage request is sent - regression test for groups (e.g. ephemeral
+	// -RANDOM- consumer group IDs) that never commit an offset but still
+	// generate group metadata (JoinGroup/SyncGroup) messages, bypassing the
+	// denylist enforced only in decodeKeyAndOffset.
+	module.decodeGroupMetadata(keyBuf, valueBytes, zap.NewNop())
+}
+
 var decodeAndSendGroupMetadataErrors = [][]byte{
 	[]byte("\x00\x08test"),
 	[]byte("\x00\x08testtype\x00\x00\x00\x01\x00\x0ctestprotocol\x00\x0atestleader\x00\x00\x00"),
